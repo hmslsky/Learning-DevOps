@@ -40,7 +40,7 @@
 3. 控制端输入该 ID → 点击连接 → 输入密码 → 成功连接
 
 > 📌 **小技巧：**
-> * “复制”按钮可以一键复制 ID/密码
+> * "复制"按钮可以一键复制 ID/密码
 > * 如果两台设备在同一局域网，会自动直连（速度更快）
 
 ### 2.3 界面导览
@@ -62,13 +62,13 @@
 1. 打开 RustDesk → 设置 → 「安全」
 2. 启用「允许无人值守访问」
 3. 设置一个永久密码
-4. 控制端输入 ID 时可勾选“记住密码”
+4. 控制端输入 ID 时可勾选"记住密码"
 
 > ✅ 这样即可随时连接，无需目标端手动确认
 
 ### 3.2 文件传输功能
 
-* 连接成功后，顶部点击 **“文件传输”** 图标
+* 连接成功后，顶部点击 **"文件传输"** 图标
 * 支持拖放文件、双向传输
 * 文件管理窗口可直接复制、粘贴、删除文件
 
@@ -84,7 +84,7 @@
 ### 3.4 多显示器支持
 
 * 连接后点击顶部「显示器」图标
-* 可以选择“单屏显示”或“所有屏幕”
+* 可以选择"单屏显示"或"所有屏幕"
 * 支持动态切换显示器
 
 ### 3.5 自定义显示设置
@@ -297,7 +297,81 @@ services:
 docker compose up -d
 ```
 
-### 4.4 防火墙配置
+### 4.4 详细的 Docker 部署指南
+
+#### 4.4.1 Docker 环境准备
+
+Ubuntu 24.04 环境中安装 Docker：
+
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io
+```
+
+创建数据目录：
+
+```bash
+sudo mkdir -p /opt/rustdesk
+cd /opt/rustdesk
+```
+
+#### 4.4.2 部署方式比较
+
+##### 方式一：分别启动两个容器（推荐）
+
+```bash
+# 启动 hbbs（信令服务）
+docker run -d --name rustdesk-hbbs \
+  --restart=always \
+  -v /opt/rustdesk:/data \
+  -p 21114:21114 -p 21116:21116 \
+  rustdesk/rustdesk-server hbbs -r hbbr.mydomain.com
+
+# 启动 hbbr（中继服务）
+docker run -d --name rustdesk-hbbr \
+  --restart=always \
+  -v /opt/rustdesk:/data \
+  -p 21115:21115 -p 21117:21117 -p 21119:21119/udp \
+  rustdesk/rustdesk-server hbbr
+```
+
+📌 参数说明：
+
+| 参数                       | 说明                 |
+| ------------------------ | ------------------ |
+| `-p 21114:21114`         | hbbs 信令端口          |
+| `-p 21115:21115`         | hbbr 中继端口          |
+| `-p 21119:21119/udp`     | 中继 UDP 端口          |
+| `-v /opt/rustdesk:/data` | 数据（证书、配置）持久化       |
+| `-r hbbr.mydomain.com`   | hbbs 告诉客户端，中继服务器在哪 |
+
+##### 方式二：将 hbbs 和 hbbr 放在一个容器中运行
+
+可以，但**不推荐生产环境使用**，因为：
+
+* 容器内两个进程管理复杂；
+* 日志与异常分离不方便；
+* 不易独立重启。
+
+如果仅做测试或个人使用，可以这样运行：
+
+```bash
+docker run -d --name rustdesk-server \
+  --restart=always \
+  -v /opt/rustdesk:/data \
+  -p 21114:21114 -p 21115:21115 -p 21116:21116 -p 21117:21117 -p 21119:21119/udp \
+  rustdesk/rustdesk-server sh -c "hbbr & hbbs -r yourdomain.com"
+```
+
+### 4.5 防火墙配置
 
 在服务器上打开必要端口（以 Ubuntu + ufw 为例）：
 ```bash
@@ -310,26 +384,41 @@ sudo ufw allow 21114:21119/tcp
 # UDP: 21116
 sudo ufw allow 21116/udp
 
+# UDP: 21119
+sudo ufw allow 21119/udp
+
 sudo ufw enable
 sudo ufw status
 ```
 
 > ⚠️ 注意：如果你在云服务器上，还需要在云控制台的安全组中开放相同端口
 
-### 4.5 客户端配置
+### 4.6 客户端配置与验证
 
-1. 查看生成的公钥文件：
-```bash
-cat /opt/rustdesk/data/id_ed25519.pub
-```
+1. 查看容器日志：
 
-2. 客户端配置步骤：
-   * 打开 RustDesk → 设置 → **Client Configuration**
-   * 在 **ID Server** 填写：`你的公网IP:21116`
-   * 在 **Relay Server** 填写：`你的公网IP:21117`
-   * **Key**：粘贴上面获取的公钥内容
+   ```bash
+   docker logs -f rustdesk-hbbs
+   docker logs -f rustdesk-hbbr
+   ```
 
-> 🔑 重要：必须正确配置 Key，否则会出现 `Key mismatch` / `Not ready` 等错误
+   如果出现类似 "Listening on 21114" 则表示成功。
+
+2. 获取服务器的公钥：
+
+   ```bash
+   docker exec -it rustdesk-hbbs cat /data/id_ed25519.pub
+   ```
+
+   将这串公钥填入 RustDesk 客户端设置 → "自建服务器" → "公钥"。
+
+3. 在客户端中填写：
+
+   ```
+   ID Server: yourserver.com:21114
+   Relay Server: yourserver.com:21115
+   Key: <上面那串公钥>
+   ```
 
 ## 5. 高级应用与最佳实践
 
@@ -343,9 +432,9 @@ cat /opt/rustdesk/data/id_ed25519.pub
 * **自动启动配置**：
   * 打开 RustDesk → 设置 → 常规
   * 启用：
-    * ✅ “开机启动”
-    * ✅ “最小化到托盘”
-    * ✅ “自动启动无人值守服务”
+    * ✅ "开机启动"
+    * ✅ "最小化到托盘"
+    * ✅ "自动启动无人值守服务"
 
 ### 5.2 安全建议
 
@@ -407,6 +496,17 @@ rustdesk.exe --connect 123456789 --password yourpass
    * 可以，但如果 `hbbr`（relay）不在 `hbbs` 同机或不是默认端口，需要在 hbbs 配置 `RELAY_SERVERS`
    * 大多数单机部署直接同时运行 hbbs 与 hbbr 最简单且稳定
 
+4. **Docker 部署 hbbs 和 hbbr 的最佳实践？**
+   * **推荐方式**：同主机不同容器（便于独立管理和升级）
+   * **测试/个人使用**：可尝试单容器运行（但生产环境不建议）
+   * **高可用性**：可在不同机器上部署多个 hbbr 实例，实现中继服务负载均衡
+
+5. **如何优化 Docker 部署的性能？**
+   * 确保启用 UDP 转发（`-p 21116:21116/udp` 和 `-p 21119:21119/udp`）
+   * 使用 `--net=host` 网络模式（减少网络开销）
+   * 为容器分配足够的资源（CPU 和内存限制）
+   * 定期清理日志，防止磁盘空间不足
+
 ## 7. 总结与资源
 
 ### 7.1 RustDesk 学习路径
@@ -430,7 +530,7 @@ rustdesk.exe --connect 123456789 --password yourpass
 1. [ ] Docker 已安装并能运行容器
 2. [ ] 拉取 `rustdesk/rustdesk-server:latest` 镜像
 3. [ ] 启动 `hbbs` 与 `hbbr`（推荐使用 `--net=host`）
-4. [ ] 开放防火墙：TCP `21114-21119`、UDP `21116`
+4. [ ] 开放防火墙：TCP `21114-21119`、UDP `21116` 和 `21119`
 5. [ ] 在云控制台安全组中开放相同端口
 6. [ ] 读取 `id_ed25519.pub`，把公钥配置到客户端
 7. [ ] 客户端配置 ID Server 和 Relay Server 地址
