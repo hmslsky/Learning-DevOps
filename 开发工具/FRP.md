@@ -158,6 +158,7 @@ frp/
 
 ### 服务端（frps.ini）配置示例
 
+**INI格式（经典）**：
 ```ini
 [common]
 bind_port = 7000
@@ -167,8 +168,19 @@ dashboard_pwd = password
 token = frp-secret
 ```
 
+**TOML格式（推荐用于新版frp）**：
+```toml
+[common]
+bindPort = 7000
+dashboardPort = 7500
+dashboardUser = "admin"
+dashboardPwd = "password"
+token = "frp-secret"
+```
+
 ### 客户端（frpc.ini）配置示例
 
+**INI格式（经典）**：
 ```ini
 [common]
 server_addr = x.x.x.x
@@ -181,6 +193,20 @@ local_port = 80
 custom_domains = yourdomain.com
 ```
 
+**TOML格式（推荐用于新版frp）**：
+```toml
+[common]
+serverAddr = "x.x.x.x"
+serverPort = 7000
+token = "frp-secret"
+
+[[proxies]]
+name = "web"
+type = "http"
+localPort = 80
+customDomains = ["yourdomain.com"]
+```
+
 ---
 
 # 🧰 三、核心功能与操作
@@ -189,6 +215,7 @@ custom_domains = yourdomain.com
 
 ### ① 服务端配置 `frps.ini`
 
+**INI格式**：
 ```ini
 [common]
 bind_port = 7000
@@ -200,8 +227,21 @@ log_file = ./frps.log
 log_level = info
 ```
 
+**TOML格式**：
+```toml
+[common]
+bindPort = 7000
+dashboardPort = 7500
+dashboardUser = "admin"
+dashboardPwd = "123456"
+token = "mysecret"
+logFile = "./frps.log"
+logLevel = "info"
+```
+
 ### ② 客户端配置 `frpc.ini`
 
+**INI格式**：
 ```ini
 [common]
 server_addr = 203.0.113.1
@@ -218,6 +258,27 @@ remote_port = 6000
 type = http
 local_port = 8080
 custom_domains = web.myserver.com
+```
+
+**TOML格式**：
+```toml
+[common]
+serverAddr = "203.0.113.1"
+serverPort = 7000
+token = "mysecret"
+
+[[proxies]]
+name = "ssh"
+type = "tcp"
+localAddr = "127.0.0.1"
+localPort = 22
+remotePort = 6000
+
+[[proxies]]
+name = "web"
+type = "http"
+localPort = 8080
+customDomains = ["web.myserver.com"]
 ```
 
 启动：
@@ -252,6 +313,7 @@ http://web.myserver.com
 
 * 机器 A（server）：
 
+**INI格式**：
 ```ini
 [common]
 server_addr = 203.0.113.1
@@ -265,8 +327,24 @@ local_ip = 127.0.0.1
 local_port = 22
 ```
 
+**TOML格式**：
+```toml
+[common]
+serverAddr = "203.0.113.1"
+serverPort = 7000
+token = "mysecret"
+
+[[proxies]]
+name = "ssh-server"
+type = "stcp"
+sk = "mykey"
+localAddr = "127.0.0.1"
+localPort = 22
+```
+
 * 机器 B（client）：
 
+**INI格式**：
 ```ini
 [common]
 server_addr = 203.0.113.1
@@ -280,6 +358,23 @@ server_name = ssh-server
 sk = mykey
 bind_addr = 127.0.0.1
 bind_port = 6000
+```
+
+**TOML格式**：
+```toml
+[common]
+serverAddr = "203.0.113.1"
+serverPort = 7000
+token = "mysecret"
+
+[[proxies]]
+name = "ssh-visitor"
+type = "stcp"
+role = "visitor"
+serverName = "ssh-server"
+sk = "mykey"
+bindAddr = "127.0.0.1"
+bindPort = 6000
 ```
 
 B 上执行：
@@ -362,8 +457,19 @@ systemctl start frps
 mkdir -p /opt/frp/{frps,frpc}
 ```
 
-**/opt/frp/frps/frps.ini**
+**/opt/frp/frps/frps.toml**（推荐）
 
+**TOML格式**：
+```toml
+[common]
+bindPort = 7000
+dashboardPort = 7500
+dashboardUser = "admin"
+dashboardPwd = "password"
+token = "frp-token"
+```
+
+**INI格式**（兼容旧版）：
 ```ini
 [common]
 bind_port = 7000
@@ -373,8 +479,23 @@ dashboard_pwd = password
 token = frp-token
 ```
 
-**/opt/frp/frpc/frpc.ini**
+**/opt/frp/frpc/frpc.toml**（推荐）
 
+**TOML格式**：
+```toml
+[common]
+serverAddr = "your-server-ip"
+serverPort = 7000
+token = "frp-token"
+
+[[proxies]]
+name = "web"
+type = "http"
+localPort = 80
+customDomains = ["example.com"]
+```
+
+**INI格式**（兼容旧版）：
 ```ini
 [common]
 server_addr = your-server-ip
@@ -393,18 +514,22 @@ custom_domains = example.com
 
 ```bash
 docker run -d --name frps \
-  -v /opt/frp/frps/frps.ini:/etc/frp/frps.ini \
+  -v /opt/frp/frps/frps.toml:/etc/frp/frps.toml \
   -p 7000:7000 -p 7500:7500 \
-  snowdreamtech/frps:latest
+  snowdreamtech/frps:latest -c /etc/frp/frps.toml
 ```
 
 **frpc 客户端**
 
 ```bash
 docker run -d --name frpc \
-  -v /opt/frp/frpc/frpc.ini:/etc/frp/frpc.ini \
-  snowdreamtech/frpc:latest
+  -v /opt/frp/frpc/frpc.toml:/etc/frp/frpc.toml \
+  snowdreamtech/frpc:latest -c /etc/frp/frpc.toml
 ```
+
+> 💡 注意：
+> - 使用 `-c` 参数显式指定配置文件路径
+> - 若需使用 INI 格式，请修改挂载路径为 `.ini` 文件并相应调整 `-c` 参数
 
 > ✅ 优点：
 >
@@ -556,6 +681,7 @@ token = your-frp-token            # 如果 frps 配置了 token，请填一致
 
 适合：只想快速把本地 `11434` 暴露为公网端口（比如 `60034`）。
 
+**INI格式**：
 ```ini
 # frpc.ini
 [common]
@@ -571,6 +697,27 @@ remote_port = 60034
 # 可选安全：启用传输加密/压缩（某些 frp 版本使用 transport.* 配置，见 TOML 例子）
 # use_encryption = true
 # use_compression = true
+```
+
+**TOML格式**：
+```toml
+# frpc.toml
+[common]
+serverAddr = "203.0.113.10"
+serverPort = 7000
+token = "your-frp-token"
+
+[[proxies]]
+name = "ollama-tcp"
+type = "tcp"
+localAddr = "127.0.0.1"
+localPort = 11434
+remotePort = 60034
+
+# 传输层加密与压缩（提高安全，但占用 CPU）
+[transport]
+useEncryption = true
+useCompression = true
 ```
 
 **访问方法（外部）**：
@@ -631,7 +778,48 @@ curl -u ollamauser:strongpassword123 http://ollama.example.com/api/models
 * 配置 `vhost_https_port = 443`（或者 7443），并在 `frps` 或前端 Nginx 上配置有效 TLS 证书（Let's Encrypt / 手动证书）。
 * 如果 `frps` 本身没有内置证书或你想用 Nginx 反代：把域名 DNS 指向该服务器，用 Nginx 做反向代理到 frps 的 vhost_http_port 或 vhost_https_port。
 
-`frpc.ini`（INI）基本同上（HTTP 部分相同），客户端无需额外修改。但**强烈建议**在 `frpc`/`frps` 之间启用传输加密（transport.useEncryption）来保护隧道内数据（frp 支持在 transport 层加密）。
+**INI格式**：
+```ini
+[common]
+server_addr = frps.example.com
+server_port = 7000
+token = your-frp-token
+
+[ollama-https]
+type = https
+local_ip = 127.0.0.1
+local_port = 11434
+custom_domains = ollama.example.com
+http_user = ollamauser
+http_pwd = strongpassword123
+# 可选：启用 proxy protocol 版本
+# proxy_protocol_version = v2
+```
+
+**TOML格式**：
+```toml
+[common]
+serverAddr = "frps.example.com"
+serverPort = 7000
+token = "your-frp-token"
+
+[[proxies]]
+name = "ollama-https"
+type = "https"
+localAddr = "127.0.0.1"
+localPort = 11434
+customDomains = ["ollama.example.com"]
+httpUser = "ollamauser"
+httpPassword = "strongpassword123"
+proxyProtocolVersion = "v2"
+
+# 传输层加密与压缩
+[transport]
+useEncryption = true
+useCompression = true
+```
+
+客户端配置基本与HTTP部分相同，但**强烈建议**在 `frpc`/`frps` 之间启用传输加密（transport.useEncryption）来保护隧道内数据。
 
 #### 4.6.4.2 TOML（新式）配置示例（推荐用于新版 frp）
 
@@ -764,6 +952,7 @@ http_pwd = superStrongPassword!
 #### TOML（带 transport 加密）
 
 ```toml
+# frpc.toml
 [common]
 serverAddr = "frps.example.com"
 serverPort = 7000
@@ -777,11 +966,117 @@ localPort = 11434
 customDomains = ["ollama.example.com"]
 httpUser = "ollamauser"
 httpPassword = "superStrongPassword!"
+proxyProtocolVersion = "v2"  # 可选：如果你要把真实 IP 传给后端
 
 [transport]
 useEncryption = true
 useCompression = true
 ```
+
+## 4.7 TOML 与 INI 格式转换说明与最佳实践
+
+### 4.7.1 为什么选择 TOML？
+
+TOML（Tom's Obvious, Minimal Language）是一种现代化的配置文件格式，相比传统的INI格式，它具有以下优势：
+
+- **更好的类型支持**：TOML原生支持字符串、整数、浮点数、布尔值、数组等多种数据类型
+- **更清晰的层次结构**：支持嵌套表，便于组织复杂配置
+- **数组语法**：对于多值配置（如 `custom_domains`）更直观
+- **注释支持**：更灵活的注释语法
+- **新版推荐**：frp 新版官方更推荐使用 TOML 格式
+
+### 4.7.2 INI 与 TOML 核心差异对比
+
+| 特性 | INI 格式 | TOML 格式 |
+|------|---------|----------|
+| 配置分组 | `[section]` | `[table]` |
+| 键值对 | `key = value` | `key = value` |
+| 字符串 | `key = value` | `key = "value"` (建议用引号) |
+| 代理定义 | `[proxy_name]` | `[[proxies]]`<br>`name = "proxy_name"` |
+| 数组 | `key = a,b,c` | `key = ["a", "b", "c"]` |
+| 传输配置 | 散布在各节中或 `use_encryption = true` | 集中在 `[transport]` 表中 |
+| 多域名 | `custom_domains = example.com,test.com` | `customDomains = ["example.com", "test.com"]` |
+
+### 4.7.3 转换示例：从 INI 到 TOML
+
+#### 基本配置转换
+
+INI格式：
+```ini
+[common]
+server_addr = 1.2.3.4
+server_port = 7000
+token = 123456
+
+[ssh]
+type = tcp
+local_ip = 127.0.0.1
+local_port = 22
+remote_port = 6000
+```
+
+对应TOML格式：
+```toml
+[common]
+serverAddr = "1.2.3.4"
+serverPort = 7000
+token = "123456"
+
+[[proxies]]
+name = "ssh"
+type = "tcp"
+localAddr = "127.0.0.1"
+localPort = 22
+remotePort = 6000
+```
+
+#### HTTP代理转换
+
+INI格式：
+```ini
+[web]
+type = http
+local_ip = 127.0.0.1
+local_port = 80
+custom_domains = web.example.com,www.example.com
+http_user = admin
+http_pwd = password
+```
+
+对应TOML格式：
+```toml
+[[proxies]]
+name = "web"
+type = "http"
+localAddr = "127.0.0.1"
+localPort = 80
+customDomains = ["web.example.com", "www.example.com"]
+httpUser = "admin"
+httpPassword = "password"
+```
+
+### 4.7.4 TOML 最佳实践
+
+1. **总是使用引号包裹字符串值**：虽然TOML允许不加引号的字符串，但为了一致性和避免特殊字符问题，建议总是使用双引号
+2. **使用驼峰命名法**：TOML配置推荐使用驼峰命名法（`serverAddr` 而非 `server_addr`）
+3. **合理组织传输配置**：将加密、压缩等传输层配置集中放在 `[transport]` 表中
+4. **为多值配置使用数组**：如 `customDomains` 应使用数组语法
+5. **版本兼容性**：
+   - frp v0.38.0+ 完全支持 TOML 格式
+   - 对于代理配置，使用 `[[proxies]]` 数组语法而非旧版的命名表语法
+6. **配置文件扩展名**：使用 `.toml` 扩展名（`frps.toml`, `frpc.toml`）
+7. **使用注释**：在复杂配置中添加清晰的注释，提高可维护性
+
+### 4.7.5 从 INI 迁移到 TOML 的步骤
+
+1. 创建新的 `.toml` 文件（保留原INI作为备份）
+2. 复制 `[common]` 部分，注意将键名转换为驼峰命名法
+3. 将每个命名代理部分（如 `[ssh]`）转换为 `[[proxies]]` 表，并添加 `name = "ssh"`
+4. 调整所有键名为驼峰命名法
+5. 将逗号分隔的多值配置转换为数组语法
+6. 集中配置传输层选项到 `[transport]` 表
+7. 使用 `frpc verify -c frpc.toml` 验证配置有效性
+8. 测试运行确保功能正常
 
 ### 4.6.9 进阶建议（如果你需要更专业部署）
 
